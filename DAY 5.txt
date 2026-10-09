@@ -1,0 +1,359 @@
+DAY 5
+
+!!! Site to Site VPN
+!@UTM-PH
+conf t
+ hostname UTM-PH
+ enable secret pass
+ service password-encryption
+ no logging cons
+ no ip domain lookup
+ line vty 0 14
+  transport input all
+  password pass
+  login local
+  exec-timeout 0 0
+ int g1
+  ip add 208.8.8.11 255.255.255.0
+  no shut
+ int g2
+  ip add 192.168.102.11 255.255.255.0
+  no shut
+ int g3
+  ip add 10.11.11.113 255.255.255.224
+  no shut
+ !
+ username admin privilege 15 secret pass
+ ip http server
+ ip http secure-server
+ ip http authentication local
+ end
+wr
+!
+
+!@UTM-JP
+conf t
+ hostname UTM-JP
+ enable secret pass
+ service password-encryption
+ no logging cons
+ no ip domain lookup
+ line vty 0 14
+  transport input all
+  password pass
+  login local 
+  exec-timeout 0 0
+ int g1
+  ip add 208.8.8.12 255.255.255.0
+  no shut
+ int g2
+  ip add 192.168.102.12 255.255.255.0
+  no shut
+ int g3
+  ip add 10.21.21.213 255.255.255.240
+  ip add 10.22.22.223 255.255.255.192 secondary
+  no shut
+ !
+ username admin privilege 15 secret pass
+ ip http server
+ ip http secure-server
+ ip http authentication local
+ end
+wr
+!
+
+!@BLDG-JP-1
+sudo su
+hostname BLDG-JP-1
+ifconfig eth0 10.21.21.211 netmask 255.255.255.240 up
+route add default gw 10.21.21.213
+ping 10.21.21.213
+
+!@BLDG-JP-2
+sudo su
+hostname BLDG-JP-2
+ifconfig eth0 10.22.22.221 netmask 255.255.255.192 up
+route add default gw 10.22.22.223
+ping 10.22.22.223
+
+Telnet
+UTM-PH 192.168.102.11
+UTM-JP 192.168.102.12
+
+
+!!! PUBLIC KEY
+
+@UTMPH
+conf t
+ !hostname UTM-PH
+ ip domain name ccna.sec
+ crypto key generate rsa modulus 2048 label pukey exportable
+ ip ssh version 2
+ !
+ line vty 0 21
+ transport input all
+ login local
+ end
+
+
+@UTMJP
+conf t
+ !hostname UTM-JP
+ ip domain name ccna.sec
+ crypto key generate rsa modulus 2048 label pukey exportable
+ ip ssh version 2
+ !
+ line vty 0 21
+ transport input all
+ login local
+ end
+ 
+!!! DISPLAY PUBLIC KEY
+conf t
+ crypto key export rsa pukey pem terminal aes C1sc0123
+ 
+
+
+!!! SWITCHING
+
+Enterprise switch
+1. PoE
+2. MAC Learning
+3. Loop avoidance
+
+@coretaas and corebaba
+conf t
+no spanning-tree vlan 1-1000
+end
+
+@coretaas and corebaba
+conf t
+spanning-tree vlan 1-1000
+end
+
+
+
+Everything layer 2
+1. Qupid - 802.1q - Trunking to allow multiple vlans
+2. Darna - 802.1d - STP spanning-tree protocol
+3. Wonderwoman - 802.1w
+4. Superman - 802.1s
+
+
+@coretaas and corebaba
+conf t
+default int range fa0/10-12
+end
+
+!!!!!!!!!!!!
+
+TASK 1: Trunk configuration
+
+@C1
+conf t
+ int range e0/0-3, e1/2-3
+  switchport trunk encapsulation dot1q
+  switchport mode trunk
+  switchport trunk allowed vlan all
+  switchport trunk native vlan 1
+  no shut
+  end
+show int trunk
+
+@A1
+conf t
+ int range e0/1-3, e1/0
+  switchport trunk encapsulation dot1q
+  switchport mode trunk
+  switchport trunk allowed vlan all
+  switchport trunk native vlan 1
+  no shut
+  end
+show int trunk
+
+
+@A2
+conf t
+ int range e0/1-3
+  switchport trunk encapsulation dot1q
+  switchport mode trunk
+  switchport trunk allowed vlan all
+  switchport trunk native vlan 1
+  no shut
+  end
+show int trunk
+
+
+@C2
+conf t
+ int range e0/1-3, e1/2-3
+  switchport trunk encapsulation dot1q
+  switchport mode trunk
+  switchport trunk allowed vlan all
+  switchport trunk native vlan 1
+  no shut
+  end
+show int trunk
+
+
+!!!! Spanning tree STP
+
+STP values
+32k
+24k
+28k
+
+30 sec STP states
+blocking
+listening
+learning
+forwarding
+
+
+!!!Plotting L2 topology ( port roles )
+
+1. find the root bridge
+2. find the cost
+3. you can then look for the port roles
+- Designated
+- Alternate/Blocking port
+- Root port
+
+
+!!! L2 attacks Kali
+
+kali
+kali
+
+sudo su
+kali
+yersinia -G
+
+!!! 802.1w - RSTP
+
+conf t
+ spanning-tree backbonefast    !unnecessary for rstp (has built-in convergence)
+ spanning-tree portfast bpdufilter default
+ spanning-tree portfast bpduguard default
+ int range fa0/1-8
+  spanning-tree portfast  !edge
+ !int range fa0/10-12
+  !spanning-tree portfast !network
+  end
+
+Fa0/3                        err-disabled bpduguard
+Fa0/7                        err-disabled bpduguard
+
+!!! 802.1s - VTP - MSTP >>> Centralized the management of your VLANs
+Pre-requisite
+-trunk ports are active
+-VTP is enabled.
+
+oreTAAS-22(config)#vl
+CoreTAAS-22(config)#vlan 269
+CoreTAAS-22(config-vlan)#na
+CoreTAAS-22(config-vlan)#name VTPVLAN
+CoreTAAS-22(config-vlan)#
+CoreTAAS-22#
+CoreTAAS-22#
+
+!@CoreTAAS,C1,C2
+conf t
+ vtp domain ccna
+ vtp mode server
+ vtp version 1
+ end
+~~~
+
+~~~
+!@CoreBABA,A1,A2
+conf t
+ vtp domain ccna
+ vtp version 1
+ vtp mode client
+ end
+ 
+ 
+CoreBABA-22#show spanning-tree vlan 41
+
+MST2
+  Spanning tree enabled protocol mstp
+  Root ID    Priority    24578
+             Address     f025.72e9.6180
+             Cost        200000
+             Port        10 (FastEthernet0/10)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    28674  (priority 28672 sys-id-ext 2)
+             Address     0817.3510.e700
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Fa0/10              Root FWD 200000    128.10   P2p 
+Fa0/11              Altn BLK 200000    128.11   P2p 
+Fa0/12              Altn BLK 200000    128.12   P2p 
+
+
+CoreBABA-22#
+
+C1 - C2
+conf t
+ int range e1/2-3
+  channel-group 12 mode active
+  channel-protocol lacp
+  end
+show int po1 | inc BW
+
+A1 - C1
+conf t
+ int range e0/1-2
+  channel-group 11 mode active
+  channel-protocol lacp
+  end
+  
+A1 - C2
+conf t
+ int range e1/0,e0/3
+  channel-group 10 mode active
+  channel-protocol lacp
+  end
+  
+conf t
+ int range e0/1-2
+  channel-group 10 mode active
+  channel-protocol lacp
+  end
+  
+A2 - C2
+conf t
+ int range e0/0,e0/3
+  channel-group 22 mode active
+  channel-protocol lacp
+  end  
+  
+  
+!!! HSRP
+
+!@C1
+conf t
+ hostname C1-PLDT
+ !
+ track 1 int vlan 10 line-protocol
+ !
+ int vlan 10
+  standby 1 ip 10.2.1.69
+  standby 1 preempt
+  standby 1 Priority 150
+  standby 1 Track 1 decrement 60
+  end
+
+@C2  
+conf t
+ hostname C2-CONVERGE
+ !
+ int vlan 10
+  standby 1 ip 10.2.1.69
+  standby 1 preempt
+  standby 1 Priority 100
+  end
